@@ -194,6 +194,13 @@ parser.add_argument(
     choices=["full", "autocast"],
     default="autocast"
 )
+
+parser.add_argument(
+    "--plms",
+    action='store_true',
+    help="Enables PLMS sampler.",
+)
+
 opt = parser.parse_args()
 
 tic = time.time()
@@ -230,7 +237,6 @@ for key in lo:
     sd['model2.' + key[6:]] = sd.pop(key)
 
 config = OmegaConf.load(f"{config}")
-config.modelUNet.params.ddim_steps = opt.ddim_steps
 
 if opt.small_batch:
     config.modelUNet.params.small_batch = True
@@ -243,6 +249,11 @@ init_image = load_img(opt.init_img, opt.H, opt.W).to(device)
 model = instantiate_from_config(config.modelUNet)
 _, _ = model.load_state_dict(sd, strict=False)
 model.eval()
+
+# As the model no longer self-seeds on initialization, we must do this should we
+# reject the built-in sampling method.
+if not opt.plms:
+    model.make_schedule(ddim_num_steps=opt.ddim_steps, ddim_eta=opt.ddim_eta, verbose=False)
     
 modelCS = instantiate_from_config(config.modelCondStage)
 _, _ = modelCS.load_state_dict(sd, strict=False)
@@ -251,7 +262,7 @@ modelCS.eval()
 modelFS = instantiate_from_config(config.modelFirstStage)
 _, _ = modelFS.load_state_dict(sd, strict=False)
 modelFS.eval()
-
+del sd
 model_wrap = K.external.CompVisDenoiser(model)
 sigma_min, sigma_max = model_wrap.sigmas[0].item(), model_wrap.sigmas[-1].item()
 
@@ -323,23 +334,24 @@ with torch.no_grad():
                 while(torch.cuda.memory_allocated()/1e6 >= mem):
                     time.sleep(1)
 
-                sigmas = model_wrap.get_sigmas(opt.ddim_steps)
-                torch.manual_seed(opt.seed) # changes manual seeding procedure
-                # sigmas = K.sampling.get_sigmas_karras(opt.ddim_steps, sigma_min, sigma_max, device=device)
-                noise = torch.randn_like(init_latent) * sigmas[opt.ddim_steps - t_enc - 1] # for GPU draw
-                xi = init_latent + noise
-                sigma_sched = sigmas[opt.ddim_steps - t_enc - 1:]
-                # x = torch.randn([opt.n_samples, *shape]).to(device) * sigmas[0] # for CPU draw
-                model_wrap_cfg = CFGDenoiser(model_wrap)
-                extra_args = {'cond': c, 'uncond': uc, 'cond_scale': opt.scale}
-                samples_ddim = K.sampling.sample_lms(model_wrap_cfg, xi, sigma_sched, extra_args=extra_args, disable=False)
+                samples_ddim = None
 
-                # encode (scaled latent)
-                #z_enc = model.stochastic_encode(init_latent, torch.tensor([t_enc]*batch_size).to(device), opt.seed)
-
-                # decode it
-                #samples_ddim = model.decode(z_enc, c, t_enc, unconditional_guidance_scale=opt.scale,
-                #                            unconditional_conditioning=uc,)
+                if not opt.plms:
+                    sigmas = model_wrap.get_sigmas(opt.ddim_steps)
+                    torch.manual_seed(opt.seed) # changes manual seeding procedure
+                    # sigmas = K.sampling.get_sigmas_karras(opt.ddim_steps, sigma_min, sigma_max, device=device)
+                    noise = torch.randn_like(init_latent) * sigmas[opt.ddim_steps - t_enc - 1] # for GPU draw
+                    xi = init_latent + noise
+                    sigma_sched = sigmas[opt.ddim_steps - t_enc - 1:]
+                    # x = torch.randn([opt.n_samples, *shape]).to(device) * sigmas[0] # for CPU draw
+                    model_wrap_cfg = CFGDenoiser(model_wrap)
+                    extra_args = {'cond': c, 'uncond': uc, 'cond_scale': opt.scale}
+                    samples_ddim = K.sampling.sample_lms(model_wrap_cfg, xi, sigma_sched, extra_args=extra_args, disable=False)
+                    
+                else:
+                    z_enc = model.stochastic_encode(init_latent, torch.tensor([t_enc]*batch_size).to(device), opt.seed)
+                    samples_ddim = model.decode(z_enc, c, t_enc, unconditional_guidance_scale=opt.scale, 
+                        unconditional_conditioning=uc,)
 
 
                 modelFS.to(device)

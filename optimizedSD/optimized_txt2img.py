@@ -233,7 +233,6 @@ for key in lo:
     sd['model2.' + key[6:]] = sd.pop(key)
 
 config = OmegaConf.load(f"{config}")
-config.modelUNet.params.ddim_steps = opt.ddim_steps
 
 if opt.small_batch:
     config.modelUNet.params.small_batch = True
@@ -245,7 +244,12 @@ else:
 model = instantiate_from_config(config.modelUNet)
 _, _ = model.load_state_dict(sd, strict=False)
 model.eval()
-    
+
+# As the model no longer self-seeds on initialization, we must do this should we
+# reject the built-in sampling method.
+if not opt.plms:
+    model.make_schedule(ddim_num_steps=opt.ddim_steps, ddim_eta=opt.ddim_eta, verbose=False)
+
 modelCS = instantiate_from_config(config.modelCondStage)
 _, _ = modelCS.load_state_dict(sd, strict=False)
 modelCS.eval()
@@ -283,8 +287,9 @@ else:
 
 
 precision_scope = autocast if opt.precision=="autocast" else nullcontext
-with torch.no_grad():
 
+with torch.no_grad():
+    
     all_samples = list()
     for n in trange(opt.n_iter, desc="Sampling"):
         for prompts in tqdm(data, desc="data"):
