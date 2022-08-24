@@ -59,6 +59,7 @@ parser.add_argument(
     default="a painting of a virus monster playing guitar",
     help="the prompt to render"
 )
+
 parser.add_argument(
     "--outdir",
     type=str,
@@ -66,16 +67,19 @@ parser.add_argument(
     help="dir to write results to",
     default="outputs/txt2img-samples"
 )
+
 parser.add_argument(
     "--skip_grid",
     action='store_true',
     help="do not save a grid, only individual samples. Helpful when evaluating lots of samples",
 )
+
 parser.add_argument(
     "--skip_save",
     action='store_true',
     help="do not save individual samples. For speed measurements.",
 )
+
 parser.add_argument(
     "--ddim_steps",
     type=int,
@@ -88,76 +92,89 @@ parser.add_argument(
     action='store_true',
     help="if enabled, uses the same starting code across samples ",
 )
+
 parser.add_argument(
     "--ddim_eta",
     type=float,
     default=0.0,
     help="ddim eta (eta=0.0 corresponds to deterministic sampling",
 )
+
 parser.add_argument(
     "--n_iter",
     type=int,
     default=1,
     help="sample this often",
 )
+
 parser.add_argument(
     "--H",
     type=int,
     default=512,
     help="image height, in pixel space",
 )
+
 parser.add_argument(
     "--W",
     type=int,
     default=512,
     help="image width, in pixel space",
 )
+
 parser.add_argument(
     "--C",
     type=int,
     default=4,
     help="latent channels",
 )
+
 parser.add_argument(
     "--f",
     type=int,
     default=8,
     help="downsampling factor",
 )
+
 parser.add_argument(
     "--n_samples",
     type=int,
     default=5,
     help="how many samples to produce for each given prompt. A.k.a. batch size",
 )
+
 parser.add_argument(
     "--n_rows",
     type=int,
     default=0,
     help="rows in the grid (default: n_samples)",
 )
+
 parser.add_argument(
     "--scale",
     type=float,
     default=7,
     help="unconditional guidance scale: eps = eps(x, empty) + scale * (eps(x, cond) - eps(x, empty))",
 )
+
 parser.add_argument(
     "--from-file",
     type=str,
     help="if specified, load prompts from this file",
 )
+
 parser.add_argument(
     "--seed",
     type=int,
     default=None,
     help="the seed (for reproducible sampling)",
 )
+
 parser.add_argument(
     "--small_batch",
     action='store_true',
     help="Reduce inference time when generate a smaller batch of images",
 )
+
 parser.add_argument(
     "--precision",
     type=str,
@@ -165,6 +182,13 @@ parser.add_argument(
     choices=["full", "autocast"],
     default="autocast"
 )
+
+parser.add_argument(
+    "--plms",
+    action='store_true',
+    help="Enables PLMS sampler.",
+)
+
 opt = parser.parse_args()
 
 tic = time.time()
@@ -271,26 +295,32 @@ with torch.no_grad():
                     time.sleep(1)
 
 
-                # We adapt from the original DDIM setup to k_lms here.
-                sigmas = model_wrap.get_sigmas(opt.ddim_steps)
-                model_wrap_cfg = CFGDenoiser(model_wrap)
+                samples_ddim = None
+                sampler_str = "k_lms"
 
-                torch.manual_seed(opt.seed)
+                if not opt.plms:
+                    # We adapt from the original DDIM setup to k_lms here.
+                    sigmas = model_wrap.get_sigmas(opt.ddim_steps)
+                    model_wrap_cfg = CFGDenoiser(model_wrap)
 
-                x = torch.randn([opt.n_samples, *shape], device=device) * sigmas[0]
-                extra_args = {'cond': c, 'uncond': uc, 'cond_scale': opt.scale}
-                
-                samples_ddim = K.sampling.sample_lms(model_wrap_cfg, x, sigmas, extra_args=extra_args, disable=False)
-                #samples_ddim = model.sample(S=opt.ddim_steps,
-                #                conditioning=c,
-                #                batch_size=opt.n_samples,
-                #                seed = opt.seed,
-                #                shape=shape,
-                #                verbose=False,
-                #                unconditional_guidance_scale=opt.scale,
-                #                unconditional_conditioning=uc,
-                #                eta=opt.ddim_eta,
-                #                x_T=start_code)
+                    torch.manual_seed(opt.seed)
+
+                    x = torch.randn([opt.n_samples, *shape], device=device) * sigmas[0]
+                    extra_args = {'cond': c, 'uncond': uc, 'cond_scale': opt.scale}
+                    
+                    samples_ddim = K.sampling.sample_lms(model_wrap_cfg, x, sigmas, extra_args=extra_args, disable=False)
+                else:
+                    sampler_str = "plms"
+                    samples_ddim = model.sample(S=opt.ddim_steps,
+                                conditioning=c,
+                                batch_size=opt.n_samples,
+                                seed = opt.seed,
+                                shape=shape,
+                                verbose=False,
+                                unconditional_guidance_scale=opt.scale,
+                                unconditional_conditioning=uc,
+                                eta=opt.ddim_eta,
+                                x_T=start_code)
 
                 modelFS.to(device)
                 print("saving images")
@@ -300,7 +330,7 @@ with torch.no_grad():
                     x_sample = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                     x_sample = 255. * rearrange(x_sample[0].cpu().numpy(), 'c h w -> h w c')
                     Image.fromarray(x_sample.astype(np.uint8)).save(
-                        os.path.join(sample_path, "seed_" + str(opt.seed) + "_" + f"{base_count:05}.png"))
+                        os.path.join(sample_path, "seed_" + str(opt.seed) + "_" + sampler_str + "_" + f"{base_count:05}.png"))
                     opt.seed+=1
                     base_count += 1
 
