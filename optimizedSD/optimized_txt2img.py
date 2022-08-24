@@ -12,6 +12,8 @@ from torchvision.utils import make_grid
 import time
 from pytorch_lightning import seed_everything
 from torch import autocast
+import torch.nn as nn
+import k_diffusion as K
 from contextlib import contextmanager, nullcontext
 from ldm.util import instantiate_from_config
 
@@ -28,6 +30,20 @@ def load_model_from_config(ckpt, verbose=False):
         print(f"Global Step: {pl_sd['global_step']}")
     sd = pl_sd["state_dict"]
     return sd
+
+# Not entirely certain as to the purpose of this; however, looking at existing code, it's
+# necessary to adapt Stable Diffusion's inputs to k_lms.
+class CFGDenoiser(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.inner_model = model
+
+    def forward(self, x, sigma, uncond, cond, cond_scale):
+        x_in = torch.cat([x] * 2)
+        sigma_in = torch.cat([sigma] * 2)
+        cond_in = torch.cat([uncond, cond])
+        uncond, cond = self.inner_model(x_in, sigma_in, cond=cond_in).chunk(2)
+        return uncond + (cond - uncond) * cond_scale
 
 
 config = "optimizedSD/v1-inference.yaml"
@@ -123,7 +139,7 @@ parser.add_argument(
 parser.add_argument(
     "--scale",
     type=float,
-    default=7.5,
+    default=7,
     help="unconditional guidance scale: eps = eps(x, empty) + scale * (eps(x, cond) - eps(x, empty))",
 )
 parser.add_argument(
@@ -207,6 +223,9 @@ modelFS = instantiate_from_config(config.modelFirstStage)
 _, _ = modelFS.load_state_dict(sd, strict=False)
 modelFS.eval()
 
+model_wrap = K.external.CompVisDenoiser(model)
+sigma_min, sigma_max = model_wrap.sigmas[0].item(), model_wrap.sigmas[-1].item()
+
 if opt.precision == "autocast":
     model.half()
     modelCS.half()
@@ -252,16 +271,26 @@ with torch.no_grad():
                     time.sleep(1)
 
 
-                samples_ddim = model.sample(S=opt.ddim_steps,
-                                conditioning=c,
-                                batch_size=opt.n_samples,
-                                seed = opt.seed,
-                                shape=shape,
-                                verbose=False,
-                                unconditional_guidance_scale=opt.scale,
-                                unconditional_conditioning=uc,
-                                eta=opt.ddim_eta,
-                                x_T=start_code)
+                # We adapt from the original DDIM setup to k_lms here.
+                sigmas = model_wrap.get_sigmas(opt.ddim_steps)
+                model_wrap_cfg = CFGDenoiser(model_wrap)
+
+                torch.manual_seed(opt.seed)
+
+                x = torch.randn([opt.n_samples, *shape], device=device) * sigmas[0]
+                extra_args = {'cond': c, 'uncond': uc, 'cond_scale': opt.scale}
+                
+                samples_ddim = K.sampling.sample_lms(model_wrap_cfg, x, sigmas, extra_args=extra_args, disable=False)
+                #samples_ddim = model.sample(S=opt.ddim_steps,
+                #                conditioning=c,
+                #                batch_size=opt.n_samples,
+                #                seed = opt.seed,
+                #                shape=shape,
+                #                verbose=False,
+                #                unconditional_guidance_scale=opt.scale,
+                #                unconditional_conditioning=uc,
+                #                eta=opt.ddim_eta,
+                #                x_T=start_code)
 
                 modelFS.to(device)
                 print("saving images")
