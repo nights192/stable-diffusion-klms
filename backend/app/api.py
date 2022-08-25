@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -19,3 +20,11 @@ app.add_middleware(
 @app.get("/", tags=["root"])
 async def read_root() -> dict:
     return {"message": "Root of the coming site."}
+
+@app.websocket("/channel")
+async def image_endpoint(websocket: WebSocket):
+    await websocket.accept()
+
+    while True:
+        img_req = await websocket.receive_json()
+        await websocket.send_json({ "msg": "Silly." })
