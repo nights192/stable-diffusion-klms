@@ -283,6 +283,7 @@ else:
     print(f"reading prompts from {opt.from_file}")
     with open(opt.from_file, "r") as f:
         data = f.read().splitlines()
+        data = batch_size * list(data)
         data = list(chunk(data, batch_size))
 
 modelFS.to(device)

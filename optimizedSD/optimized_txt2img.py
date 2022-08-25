@@ -283,6 +283,7 @@ else:
     print(f"reading prompts from {opt.from_file}")
     with open(opt.from_file, "r") as f:
         data = f.read().splitlines()
+        data = batch_size * list(data)
         data = list(chunk(data, batch_size))
 
 
@@ -349,6 +350,8 @@ with torch.no_grad():
                                 x_T=start_code)
 
                 modelFS.to(device)
+
+                print(samples_ddim.shape)
                 print("saving images")
                 for i in range(batch_size):
                     
