@@ -21,6 +21,10 @@ from ldm.util import instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
 
+from split_subprompts import split_weighted_subprompts
+from transformers import logging
+logging.set_verbosity_error()
+
 class Config():
     def __init__(self):
         self.config = 'optimizedSD/v1-inference.yaml' # Don't change this
@@ -141,7 +145,20 @@ def generate(opt, prompt, grid):
                     if isinstance(prompts, tuple):
                         prompts = list(prompts)
 
-                    c = modelCS.get_learned_conditioning(prompts)
+                    subprompts,weights = split_weighted_subprompts(prompts[0])
+                    if len(subprompts) > 1:
+                        c = torch.zeros_like(uc)
+                        totalWeight = sum(weights)
+                        # normalize each "sub prompt" and add it
+                        for i in range(len(subprompts)):
+                            weight = weights[i]
+                            # if not skip_normalize:
+                            weight = weight / totalWeight
+                            c = torch.add(c,modelCS.get_learned_conditioning(subprompts[i]), alpha=weight)
+                    else:
+                        c = modelCS.get_learned_conditioning(prompts)
+
+                    
                     shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
                     mem = torch.cuda.memory_allocated()/1e6
                     modelCS.to("cpu")

@@ -2,6 +2,13 @@
 As the latest versions of the optimized stable diffusion fork do not permit k_lms filtering due to their architectural decisions,
 this version is to be permanently behind pending a greater rearchitecting effort.
 
+# Update: Added support for weighted prompts (based on the code from @lstein's [repo](https://github.com/lstein/stable-diffusion))
+
+- You can now use weighted prompts to put relative emphasis on certain words.
+  eg. `--prompt tabby cat:0.25 white duck:0.75 hybrid`.
+- The number followed by the colon represents the weight given to the words before the colon.
+  The weights can be fractions or integers.
+
 # Update: Added support for specifying image seed
 
 - The code will now give the seed number along with each generated image. To generate the same image again, just specify the seed using `--seed` argument. Also, images will be saved with its seed number as its name.

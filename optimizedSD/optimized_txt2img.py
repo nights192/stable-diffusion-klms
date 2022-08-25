@@ -16,6 +16,9 @@ import torch.nn as nn
 import k_diffusion as K
 from contextlib import contextmanager, nullcontext
 from ldm.util import instantiate_from_config
+from split_subprompts import split_weighted_subprompts
+from transformers import logging
+logging.set_verbosity_error()
 
 
 def chunk(it, size):
@@ -30,6 +33,9 @@ def load_model_from_config(ckpt, verbose=False):
         print(f"Global Step: {pl_sd['global_step']}")
     sd = pl_sd["state_dict"]
     return sd
+
+def sanitize_path(prompt_arr):
+    return [word.replace(":", "-") for word in prompt_arr]
 
 # Not entirely certain as to the purpose of this; however, looking at existing code, it's
 # necessary to adapt Stable Diffusion's inputs to k_lms.
@@ -195,8 +201,9 @@ tic = time.time()
 os.makedirs(opt.outdir, exist_ok=True)
 outpath = opt.outdir
 
-sample_path = os.path.join(outpath, "_".join(opt.prompt.split()))[:150]
+sample_path = os.path.join(outpath, "_".join(sanitize_path(opt.prompt.split())))[:150]
 os.makedirs(sample_path, exist_ok=True)
+
 base_count = len(os.listdir(sample_path))
 grid_count = len(os.listdir(outpath)) - 1
 
@@ -289,7 +296,19 @@ with torch.no_grad():
                 if isinstance(prompts, tuple):
                     prompts = list(prompts)
                 
-                c = modelCS.get_learned_conditioning(prompts)
+                subprompts,weights = split_weighted_subprompts(prompts[0])
+                if len(subprompts) > 1:
+                    c = torch.zeros_like(uc)
+                    totalWeight = sum(weights)
+                    # normalize each "sub prompt" and add it
+                    for i in range(len(subprompts)):
+                        weight = weights[i]
+                        # if not skip_normalize:
+                        weight = weight / totalWeight
+                        c = torch.add(c,modelCS.get_learned_conditioning(subprompts[i]), alpha=weight)
+                else:
+                    c = modelCS.get_learned_conditioning(prompts)
+
                 shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
                 mem = torch.cuda.memory_allocated()/1e6
                 modelCS.to("cpu")
