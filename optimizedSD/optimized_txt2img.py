@@ -247,6 +247,8 @@ modelFS = instantiate_from_config(config.modelFirstStage)
 _, _ = modelFS.load_state_dict(sd, strict=False)
 modelFS.eval()
 
+del sd
+
 model_wrap = K.external.CompVisDenoiser(model)
 sigma_min, sigma_max = model_wrap.sigmas[0].item(), model_wrap.sigmas[-1].item()
 
