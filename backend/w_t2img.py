@@ -22,7 +22,7 @@ from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
 
 class Config():
-      def __init__(self):
+    def __init__(self):
         self.config = 'optimizedSD/v1-inference.yaml' # Don't change this
         self.ckpt = ckpt # If you want to change the model location, change it on the Load movel section
 
@@ -56,7 +56,7 @@ def load_model_from_config(ckpt, verbose=False):
     sd = pl_sd["state_dict"]
     return sd
 
-ckpt = './models/ldm/stable-diffusion-v1/model.ckpt' # this points to the model that is in your root gdrive folder
+ckpt = '../models/ldm/stable-diffusion-v1/model.ckpt' # this points to the model that is in your root gdrive folder
 
 sd = load_model_from_config(f"{ckpt}")
 li = []
