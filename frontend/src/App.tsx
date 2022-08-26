@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Button from './components/button';
+import FreezableSeedInput from './components/freezable-seed-input';
 import RangeInput from './components/range-input';
 
 // Perhaps a use-case for contexts; however,
@@ -7,9 +8,9 @@ import RangeInput from './components/range-input';
 // seems a tad wasteful.
 function PromptForm({
   minDim, maxDim, maxCfg, maxSteps, maxImages,
-  
+
   width, setWidth, height, setHeight, cfgScale, setCfgScale, steps,
-  setSteps, numImages, setNumImages, seed, setSeed
+  setSteps, numImages, setNumImages, seed, setSeed, seedLocked, setSeedLocked
 }: {
   minDim: number, maxDim: number, maxCfg: number, maxSteps: number, maxImages: number,
 
@@ -19,6 +20,7 @@ function PromptForm({
   steps: number, setSteps: React.Dispatch<React.SetStateAction<number>>,
   numImages: number, setNumImages: React.Dispatch<React.SetStateAction<number>>,
   seed: number, setSeed: React.Dispatch<React.SetStateAction<number>>,
+  seedLocked: boolean, setSeedLocked: React.Dispatch<React.SetStateAction<boolean>>,
 }) {
   return <>
     <form className='mb-6'>
@@ -41,6 +43,10 @@ function PromptForm({
       <RangeInput label='Number of Images' min={1} value={numImages} setValue={setNumImages} max={maxImages} step={1}>
         Adjusts how closely should the AI adhere to your prompt; higher values are more precise.
       </RangeInput>
+
+      <FreezableSeedInput label='Seed' value={seed} setValue={setSeed} locked={seedLocked} setLocked={setSeedLocked}>
+        The identifier for a given random generation. Unlock this to set or copy your own.
+      </FreezableSeedInput>
     </form>
 
     <Button>Create</Button>
@@ -60,6 +66,7 @@ function App() {
   const [steps, setSteps] = useState(50);
   const [numImages, setNumImages] = useState(1);
   const [seed, setSeed] = useState(43);
+  const [seedLocked, setSeedLocked] = useState(false);
 
   return (
     <>
@@ -91,6 +98,9 @@ function App() {
 
             seed={seed}
             setSeed={setSeed}
+
+            seedLocked={seedLocked}
+            setSeedLocked={setSeedLocked}
           />
         </div>
         <div></div>
