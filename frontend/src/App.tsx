@@ -1,21 +1,46 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import Button from './components/button';
 import RangeInput from './components/range-input';
 
-function PromptForm({ minDim = 256, maxDim = 512, maxImages = 4 }) {
-  const textboxStyle = 'bg-neutral-900 rounded ml-4 px-4 text-lg'
-  const promptStyle = 'py-2';
+// Perhaps a use-case for contexts; however,
+// given how shallow this code-base is, such architecture
+// seems a tad wasteful.
+function PromptForm({
+  minDim, maxDim, maxCfg, maxSteps, maxImages,
+  
+  width, setWidth, height, setHeight, cfgScale, setCfgScale, steps,
+  setSteps, numImages, setNumImages, seed, setSeed
+}: {
+  minDim: number, maxDim: number, maxCfg: number, maxSteps: number, maxImages: number,
 
-  const [width, setWidth] = useState(maxDim);
-
+  width: number, setWidth: React.Dispatch<React.SetStateAction<number>>,
+  height: number, setHeight: React.Dispatch<React.SetStateAction<number>>,
+  cfgScale: number, setCfgScale: React.Dispatch<React.SetStateAction<number>>,
+  steps: number, setSteps: React.Dispatch<React.SetStateAction<number>>,
+  numImages: number, setNumImages: React.Dispatch<React.SetStateAction<number>>,
+  seed: number, setSeed: React.Dispatch<React.SetStateAction<number>>,
+}) {
   return <>
     <form className='mb-6'>
-      <RangeInput min={minDim} value={width} setValue={setWidth} max={maxDim} step={32}>Width</RangeInput>
+      <RangeInput label='Width' min={minDim} value={width} setValue={setWidth} max={maxDim} step={32}>
+        The width of your image(s).
+      </RangeInput>
 
-      <div className={promptStyle}>
-        <label className='text-lg'>Height:</label>
-        <input type='number' className={textboxStyle} min={minDim} max={maxDim} value={ minDim }/>
-      </div>
+      <RangeInput label='Height' min={minDim} value={height} setValue={setHeight} max={maxDim} step={32}>
+        The height of your image(s).
+      </RangeInput>
+
+      <RangeInput label='CfgScale' min={0} value={cfgScale} setValue={setCfgScale} max={maxCfg} step={0.5}>
+        Adjusts how closely should the AI adhere to your prompt; higher values are more precise.
+      </RangeInput>
+
+      <RangeInput label='Steps' min={1} value={steps} setValue={setSteps} max={maxSteps} step={1}>
+        The amount of steps by which the AI will detail your art.
+      </RangeInput>
+
+      <RangeInput label='Number of Images' min={1} value={numImages} setValue={setNumImages} max={maxImages} step={1}>
+        Adjusts how closely should the AI adhere to your prompt; higher values are more precise.
+      </RangeInput>
     </form>
 
     <Button>Create</Button>
@@ -23,13 +48,50 @@ function PromptForm({ minDim = 256, maxDim = 512, maxImages = 4 }) {
 }
 
 function App() {
+  const minDim = 256;
+  const maxDim = 512;
+  const maxCfg = 20;
+  const maxSteps = 150;
+  const maxImages = 4;
+
+  const [width, setWidth] = useState(maxDim);
+  const [height, setHeight] = useState(maxDim);
+  const [cfgScale, setCfgScale] = useState(7);
+  const [steps, setSteps] = useState(50);
+  const [numImages, setNumImages] = useState(1);
+  const [seed, setSeed] = useState(43);
+
   return (
     <>
       <div className='flex md:flex-row-reverse md:h-screen'>
-        <div className='bg-neutral-800 flex-initial mx-auto md:mx-0 w-96 height-full px-6 my-4 md:my-0 py-4 rounded-lg md:rounded-none'>
+        <div className='bg-neutral-800 flex-initial mx-auto md:mx-0 w-96 height-full px-6 my-4 md:my-0 py-4 md:w-1/4 rounded-lg md:rounded-none'>
           <h1 className='text-2xl text-violet-500 font-bold mb-4 text-center md:text-left'>txt2img</h1>
 
-          <PromptForm />
+          <PromptForm
+            minDim={minDim}
+            maxDim={maxDim}
+            maxCfg={maxCfg}
+            maxSteps={maxSteps}
+            maxImages={maxImages}
+
+            width={width}
+            setWidth={setWidth}
+
+            height={height}
+            setHeight={setHeight}
+
+            cfgScale={cfgScale}
+            setCfgScale={setCfgScale}
+
+            steps={steps}
+            setSteps={setSteps}
+
+            numImages={numImages}
+            setNumImages={setNumImages}
+
+            seed={seed}
+            setSeed={setSeed}
+          />
         </div>
         <div></div>
       </div>
