@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import Button from './components/button';
 import FreezableSeedInput from './components/freezable-seed-input';
 import RangeInput from './components/range-input';
+import { textboxActive } from './libs/styles';
+
+const promptTheme = `${textboxActive}`
 
 // Perhaps a use-case for contexts; however,
 // given how shallow this code-base is, such architecture
@@ -103,11 +106,17 @@ function App() {
         </div>
 
         <div className='flex flex-col place-items-center place-self-center w-full'>
-          <div className='bg-neutral-900 '>
+          <div className='bg-neutral-900 aspect-square w-1/2 w-1/2 mb-24'>
             hi
           </div>
 
-          <Button>Create</Button>
+          <div className='flex flex-col md:flex-row items-center w-full md:px-24'>
+            <div className='flex grow items-center mx-4'>
+              <textarea maxLength={500} rows={1} className={`w-full ${promptTheme} resize-none`} />
+            </div>
+
+            <Button>Create</Button>
+          </div>
         </div>
       </div>
     </>

@@ -1,8 +1,9 @@
 import React from 'react';
 import { Switch } from '@headlessui/react'
+import { textboxActive, textboxInactive } from '../libs/styles';
 
-const unlockedInputClass = 'bg-neutral-850 px-2 py-1 border-none focus:outline-0 caret-transparent focus:ring-purple-500 basis-5/6 rounded';
-const lockedInputClass = 'bg-neutral-900 px-2 py-1 border-none focus:outline-0 focus:ring caret-purple-400 focus:ring-1 focus:ring-purple-500 basis-5/6 rounded';
+const unlockedInputClass = `${textboxInactive} basis-5/6`
+const lockedInputClass = `${textboxActive} basis-5/6`;
 
 function updateUnsignedInteger(newInput: string, value: number, setValue: React.Dispatch<React.SetStateAction<number>>) {
     const seed = parseInt(newInput);

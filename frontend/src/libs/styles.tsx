@@ -1,0 +1,2 @@
+export const textboxInactive = 'bg-neutral-850 px-2 py-1 border-none focus:outline-0 caret-transparent focus:ring-purple-500 rounded';
+export const textboxActive = 'bg-neutral-900 px-2 py-1 border-none focus:outline-0 focus:ring caret-purple-400 focus:ring-1 focus:ring-purple-500 rounded';
