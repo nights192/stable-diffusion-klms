@@ -3,5 +3,5 @@
 @tailwind utilities;
 
 body {
-  @apply bg-neutral-850 text-zinc-200
+  @apply bg-neutral-850 text-zinc-400
 }

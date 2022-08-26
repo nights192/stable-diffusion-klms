@@ -21,7 +21,7 @@ from ldm.util import instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
 
-from split_subprompts import split_weighted_subprompts
+from ... import split_weighted_subprompts
 from transformers import logging
 logging.set_verbosity_error()
 
