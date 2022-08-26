@@ -48,8 +48,6 @@ function PromptForm({
         The identifier for a given random generation. Unlock this to set or copy your own.
       </FreezableSeedInput>
     </form>
-
-    <Button>Create</Button>
   </>
 }
 
@@ -70,7 +68,7 @@ function App() {
 
   return (
     <>
-      <div className='flex md:flex-row-reverse md:h-screen'>
+      <div className='md:flex md:flex-row-reverse md:h-screen'>
         <div className='bg-neutral-800 flex-initial mx-auto md:mx-0 w-96 height-full px-6 my-4 md:my-0 py-4 md:w-1/4 rounded-lg md:rounded-none'>
           <h1 className='text-2xl text-violet-500 font-bold mb-4 text-center md:text-left'>txt2img</h1>
 
@@ -103,7 +101,14 @@ function App() {
             setSeedLocked={setSeedLocked}
           />
         </div>
-        <div></div>
+
+        <div className='flex flex-col place-items-center place-self-center w-full'>
+          <div className='bg-neutral-900 '>
+            hi
+          </div>
+
+          <Button>Create</Button>
+        </div>
       </div>
     </>
   );
