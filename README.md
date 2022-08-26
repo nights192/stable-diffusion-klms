@@ -44,7 +44,7 @@
 
 - You can also use gradio interface for img2img & txt2img instead of the CLI. Just activate the conda env and install the latest version of gradio using `pip install gradio` .
 
-- Run img2img using `python optimizedSD/img2img_gradio` and txt2img using `python optimizedSD/img2img_gradio`.
+- Run img2img using `python optimizedSD/img2img_gradio.py` and txt2img using `python optimizedSD/img2img_gradio.py`.
 
 - All the modified files are in the [optimizedSD](optimizedSD) folder, so if you have already cloned the original repo, you can just download and copy this folder into the orignal repo instead of cloning the entire repo. You can also clone this repo and follow the same installation steps as the original repo(mainly creating the conda env and placing the weights at the specified location).
 
