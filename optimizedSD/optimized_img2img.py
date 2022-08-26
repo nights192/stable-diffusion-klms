@@ -11,13 +11,26 @@ from torchvision.utils import make_grid
 import time
 from pytorch_lightning import seed_everything
 from torch import autocast
+import torch.nn as nn
 from contextlib import contextmanager, nullcontext
 from einops import rearrange, repeat
 from ldm.util import instantiate_from_config
 from split_subprompts import split_weighted_subprompts
+import k_diffusion as K
 from transformers import logging
 logging.set_verbosity_error()
 
+class CFGDenoiser(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.inner_model = model
+
+    def forward(self, x, sigma, uncond, cond, cond_scale):
+        x_in = torch.cat([x] * 2)
+        sigma_in = torch.cat([sigma] * 2)
+        cond_in = torch.cat([uncond, cond])
+        uncond, cond = self.inner_model(x_in, sigma_in, cond=cond_in).chunk(2)
+        return uncond + (cond - uncond) * cond_scale
 
 def chunk(it, size):
     it = iter(it)
@@ -31,6 +44,9 @@ def load_model_from_config(ckpt, verbose=False):
         print(f"Global Step: {pl_sd['global_step']}")
     sd = pl_sd["state_dict"]
     return sd
+
+def sanitize_path(prompt_arr):
+    return [word.replace(":", "-") for word in prompt_arr]
 
 def load_img(path, h0, w0):
    
@@ -184,7 +200,7 @@ tic = time.time()
 os.makedirs(opt.outdir, exist_ok=True)
 outpath = opt.outdir
 
-sample_path = os.path.join(outpath, "_".join(opt.prompt.split()))[:150]
+sample_path = os.path.join(outpath, "_".join(sanitize_path(opt.prompt.split())))[:150]
 os.makedirs(sample_path, exist_ok=True)
 base_count = len(os.listdir(sample_path))
 grid_count = len(os.listdir(outpath)) - 1
@@ -235,6 +251,9 @@ modelCS.eval()
 modelFS = instantiate_from_config(config.modelFirstStage)
 _, _ = modelFS.load_state_dict(sd, strict=False)
 modelFS.eval()
+
+model_wrap = K.external.CompVisDenoiser(model)
+sigma_min, sigma_max = model_wrap.sigmas[0].item(), model_wrap.sigmas[-1].item()
 
 if opt.precision == "autocast":
     model.half()
@@ -304,11 +323,23 @@ with torch.no_grad():
                 while(torch.cuda.memory_allocated()/1e6 >= mem):
                     time.sleep(1)
 
+                sigmas = model_wrap.get_sigmas(opt.ddim_steps)
+                torch.manual_seed(opt.seed) # changes manual seeding procedure
+                # sigmas = K.sampling.get_sigmas_karras(opt.ddim_steps, sigma_min, sigma_max, device=device)
+                noise = torch.randn_like(init_latent) * sigmas[opt.ddim_steps - t_enc - 1] # for GPU draw
+                xi = init_latent + noise
+                sigma_sched = sigmas[opt.ddim_steps - t_enc - 1:]
+                # x = torch.randn([opt.n_samples, *shape]).to(device) * sigmas[0] # for CPU draw
+                model_wrap_cfg = CFGDenoiser(model_wrap)
+                extra_args = {'cond': c, 'uncond': uc, 'cond_scale': opt.scale}
+                samples_ddim = K.sampling.sample_lms(model_wrap_cfg, xi, sigma_sched, extra_args=extra_args, disable=False)
+
                 # encode (scaled latent)
-                z_enc = model.stochastic_encode(init_latent, torch.tensor([t_enc]*batch_size).to(device), opt.seed)
+                #z_enc = model.stochastic_encode(init_latent, torch.tensor([t_enc]*batch_size).to(device), opt.seed)
+
                 # decode it
-                samples_ddim = model.decode(z_enc, c, t_enc, unconditional_guidance_scale=opt.scale,
-                                            unconditional_conditioning=uc,)
+                #samples_ddim = model.decode(z_enc, c, t_enc, unconditional_guidance_scale=opt.scale,
+                #                            unconditional_conditioning=uc,)
 
 
                 modelFS.to(device)
