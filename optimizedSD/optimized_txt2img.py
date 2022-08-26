@@ -50,7 +50,6 @@ class CFGDenoiser(nn.Module):
 
 config = "optimizedSD/v1-inference.yaml"
 ckpt = "models/ldm/stable-diffusion-v1/model.ckpt"
-device = "cuda"
 
 parser = argparse.ArgumentParser()
 
@@ -157,7 +156,6 @@ parser.add_argument(
     default=7,
     help="unconditional guidance scale: eps = eps(x, empty) + scale * (eps(x, cond) - eps(x, empty))",
 )
-
 parser.add_argument(
     "--from-file",
     type=str,
@@ -197,16 +195,14 @@ tic = time.time()
 os.makedirs(opt.outdir, exist_ok=True)
 outpath = opt.outdir
 
-sample_path = os.path.join(outpath, "_".join(sanitize_path(opt.prompt.split())))[:150]
+sample_path = os.path.join(outpath, '_'.join(re.split(':| ',opt.prompt)))[:150]
 os.makedirs(sample_path, exist_ok=True)
 base_count = len(os.listdir(sample_path))
 grid_count = len(os.listdir(outpath)) - 1
 
 if opt.seed == None:
     opt.seed = randint(0, 1000000)
-print("init_seed = ", opt.seed)
 seed_everything(opt.seed)
-
 
 sd = load_model_from_config(f"{ckpt}")
 li = []
@@ -234,7 +230,7 @@ if opt.small_batch:
 else:
     config.modelUNet.params.small_batch = False
 
-
+config.modelCondStage.params.cond_stage_config.params.device = opt.device
 
 model = instantiate_from_config(config.modelUNet)
 _, _ = model.load_state_dict(sd, strict=False)
@@ -258,13 +254,14 @@ del sd
 model_wrap = K.external.CompVisDenoiser(model)
 sigma_min, sigma_max = model_wrap.sigmas[0].item(), model_wrap.sigmas[-1].item()
 
-if opt.precision == "autocast":
+model.cdevice = opt.device
+if opt.device != "cpu" and opt.precision == "autocast":
     model.half()
     modelCS.half()
 
 start_code = None
 if opt.fixed_code:
-    start_code = torch.randn([opt.n_samples, opt.C, opt.H // opt.f, opt.W // opt.f], device=device)
+    start_code = torch.randn([opt.n_samples, opt.C, opt.H // opt.f, opt.W // opt.f], device=opt.device)
 
 
 batch_size = opt.n_samples
@@ -282,7 +279,10 @@ else:
         data = list(chunk(data, batch_size))
 
 
-precision_scope = autocast if opt.precision=="autocast" else nullcontext
+if opt.precision=="autocast" and opt.device != "cpu":
+    precision_scope = autocast
+else:
+    precision_scope = nullcontext
 
 with torch.no_grad():
     
@@ -290,7 +290,7 @@ with torch.no_grad():
     for n in trange(opt.n_iter, desc="Sampling"):
         for prompts in tqdm(data, desc="data"):
              with precision_scope("cuda"):
-                modelCS.to(device)
+                modelCS.to(opt.device)
                 uc = None
                 if opt.scale != 1.0:
                     uc = modelCS.get_learned_conditioning(batch_size * [""])
@@ -311,10 +311,12 @@ with torch.no_grad():
                     c = modelCS.get_learned_conditioning(prompts)
 
                 shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
-                mem = torch.cuda.memory_allocated()/1e6
-                modelCS.to("cpu")
-                while(torch.cuda.memory_allocated()/1e6 >= mem):
-                    time.sleep(1)
+
+                if(opt.device != 'cpu'):
+                    mem = torch.cuda.memory_allocated()/1e6
+                    modelCS.to("cpu")
+                    while(torch.cuda.memory_allocated()/1e6 >= mem):
+                        time.sleep(1)
 
 
                 samples_ddim = None
@@ -327,7 +329,7 @@ with torch.no_grad():
 
                     torch.manual_seed(opt.seed)
 
-                    x = torch.randn([opt.n_samples, *shape], device=device) * sigmas[0]
+                    x = torch.randn([opt.n_samples, *shape], device=opt.device) * sigmas[0]
                     extra_args = {'cond': c, 'uncond': uc, 'cond_scale': opt.scale}
                     
                     samples_ddim = K.sampling.sample_lms(model_wrap_cfg, x, sigmas, extra_args=extra_args, disable=False)
@@ -344,7 +346,7 @@ with torch.no_grad():
                                 eta=opt.ddim_eta,
                                 x_T=start_code)
 
-                modelFS.to(device)
+                modelFS.to(opt.device)
 
                 print(samples_ddim.shape)
                 print("saving images")
@@ -358,11 +360,11 @@ with torch.no_grad():
                     opt.seed+=1
                     base_count += 1
 
-
-                mem = torch.cuda.memory_allocated()/1e6
-                modelFS.to("cpu")
-                while(torch.cuda.memory_allocated()/1e6 >= mem):
-                    time.sleep(1)
+                if(opt.device != 'cpu'):
+                    mem = torch.cuda.memory_allocated()/1e6
+                    modelFS.to("cpu")
+                    while(torch.cuda.memory_allocated()/1e6 >= mem):
+                        time.sleep(1)
                 del samples_ddim
                 print("memory_final = ", torch.cuda.memory_allocated()/1e6)
 
