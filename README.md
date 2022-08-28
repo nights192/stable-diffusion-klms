@@ -77,6 +77,12 @@ All the modified files are in the [optimizedSD](optimizedSD) folder, so if you h
 
 - Using this argument increases the inference speed by using around 1GB of extra GPU VRAM. It is especially effective when generating a small batch of images (~ 1 to 4) images. It takes under 25 seconds for txt2img and 15 seconds for img2img (on an RTX 2060, excluding the time to load the model). Use it on larger batch sizes if GPU VRAM available.
 
+## `--plms`
+
+**Changes sampling method to PLMS.**
+
+- Alters the sampling method from k_lms to the slower plms.
+
 ## `--precision autocast` or `--precision full`
 
 **Whether to use `full` or `mixed` precision**
