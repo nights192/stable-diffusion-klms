@@ -170,6 +170,13 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--device",
+    type=str,
+    default="cuda",
+    help="CPU or GPU (cuda/cuda:0/cuda:1/...)",
+)
+
+parser.add_argument(
     "--small_batch",
     action='store_true',
     help="Reduce inference time when generate a smaller batch of images",
