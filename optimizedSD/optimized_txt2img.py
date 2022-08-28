@@ -168,18 +168,22 @@ parser.add_argument(
     default=None,
     help="the seed (for reproducible sampling)",
 )
-
 parser.add_argument(
     "--device",
     type=str,
     default="cuda",
     help="CPU or GPU (cuda/cuda:0/cuda:1/...)",
 )
-
 parser.add_argument(
-    "--small_batch",
+    "--unet_bs",
+    type=int,
+    default=1,
+    help="Slightly reduces inference time at the expense of high VRAM (value > 1 not recommended )",
+)
+parser.add_argument(
+    "--turbo",
     action='store_true',
-    help="Reduce inference time when generate a smaller batch of images",
+    help="Reduces inference time on the expense of 1GB VRAM",
 )
 
 parser.add_argument(
@@ -212,8 +216,7 @@ if opt.seed == None:
 seed_everything(opt.seed)
 
 sd = load_model_from_config(f"{ckpt}")
-li = []
-lo = []
+li, lo = [], []
 for key, value in sd.items():
     sp = key.split('.')
     if(sp[0]) == 'model':
@@ -232,16 +235,12 @@ for key in lo:
 
 config = OmegaConf.load(f"{config}")
 
-if opt.small_batch:
-    config.modelUNet.params.small_batch = True
-else:
-    config.modelUNet.params.small_batch = False
-
-config.modelCondStage.params.cond_stage_config.params.device = opt.device
-
 model = instantiate_from_config(config.modelUNet)
 _, _ = model.load_state_dict(sd, strict=False)
 model.eval()
+model.unet_bs = opt.unet_bs
+model.cdevice = opt.device
+model.turbo = opt.turbo
 
 # As the model no longer self-seeds on initialization, we must do this should we
 # reject the built-in sampling method.
@@ -251,6 +250,7 @@ if not opt.plms:
 modelCS = instantiate_from_config(config.modelCondStage)
 _, _ = modelCS.load_state_dict(sd, strict=False)
 modelCS.eval()
+modelCS.cond_stage_model.device = opt.device
     
 modelFS = instantiate_from_config(config.modelFirstStage)
 _, _ = modelFS.load_state_dict(sd, strict=False)
@@ -261,7 +261,6 @@ del sd
 model_wrap = K.external.CompVisDenoiser(model)
 sigma_min, sigma_max = model_wrap.sigmas[0].item(), model_wrap.sigmas[-1].item()
 
-model.cdevice = opt.device
 if opt.device != "cpu" and opt.precision == "autocast":
     model.half()
     modelCS.half()
@@ -291,6 +290,7 @@ if opt.precision=="autocast" and opt.device != "cpu":
 else:
     precision_scope = nullcontext
 
+seeds = ''
 with torch.no_grad():
     
     all_samples = list()
@@ -363,7 +363,8 @@ with torch.no_grad():
                     x_sample = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                     x_sample = 255. * rearrange(x_sample[0].cpu().numpy(), 'c h w -> h w c')
                     Image.fromarray(x_sample.astype(np.uint8)).save(
-                        os.path.join(sample_path, "seed_" + str(opt.seed) + "_" + sampler_str + "_" + f"{base_count:05}.png"))
+                        os.path.join(sample_path, "seed_" + str(opt.seed) + "_" + f"{base_count:05}.png"))
+                    seeds+= str(opt.seed) + ','
                     opt.seed+=1
                     base_count += 1
 
@@ -379,4 +380,4 @@ toc = time.time()
 
 time_taken = (toc-tic)/60.0
 
-print(("Your samples are ready in {0:.2f} minutes and waiting for you here \n" + sample_path).format(time_taken))
+print(("Your samples are ready in {0:.2f} minutes and waiting for you here " + sample_path + "\n Seeds used = " + seeds[:-1]).format(time_taken))
