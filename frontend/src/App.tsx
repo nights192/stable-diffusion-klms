@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import Button from './components/button';
 import FreezableSeedInput from './components/freezable-seed-input';
+import Prompt from './components/prompt';
 import RangeInput from './components/range-input';
-import { textboxActive } from './libs/styles';
-
-const promptTheme = `${textboxActive}`
 
 // Perhaps a use-case for contexts; however,
 // given how shallow this code-base is, such architecture
@@ -69,6 +67,8 @@ function App() {
   const [seed, setSeed] = useState(43);
   const [seedLocked, setSeedLocked] = useState(false);
 
+  const [prompt, setPrompt] = useState("");
+
   return (
     <>
       <div className='md:flex md:flex-row-reverse md:h-screen'>
@@ -105,15 +105,13 @@ function App() {
           />
         </div>
 
-        <div className='flex flex-col place-items-center place-self-center w-full'>
+        <div className='flex flex-col place-items-center place-self-center w-full mb-2 md:mb-0'>
           <div className='bg-neutral-900 aspect-square w-1/2 w-1/2 mb-24'>
             hi
           </div>
 
-          <div className='flex flex-col md:flex-row items-center w-full md:px-24'>
-            <div className='flex grow items-center mx-4'>
-              <textarea maxLength={500} rows={1} className={`w-full ${promptTheme} resize-none`} />
-            </div>
+          <div className='flex flex-col md:flex-row items-center w-full gap-y-2 md:px-24'>
+            <Prompt value={prompt} setValue={setPrompt} />
 
             <Button>Create</Button>
           </div>
