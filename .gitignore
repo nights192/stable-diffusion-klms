@@ -3,3 +3,4 @@ latent_diffusion.egg-info/
 models/ldm/stable-diffusion-v1/model.ckpt
 outputs/
 **/__pycache__/
+/logs/
