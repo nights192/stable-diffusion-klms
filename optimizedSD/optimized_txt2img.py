@@ -33,9 +33,6 @@ def load_model_from_config(ckpt, verbose=False):
     sd = pl_sd["state_dict"]
     return sd
 
-def sanitize_path(prompt_arr):
-    return [word.replace(":", "-") for word in prompt_arr]
-
 # Not entirely certain as to the purpose of this; however, looking at existing code, it's
 # necessary to adapt Stable Diffusion's inputs to k_lms.
 class CFGDenoiser(nn.Module):

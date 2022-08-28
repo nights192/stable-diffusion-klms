@@ -45,9 +45,6 @@ def load_model_from_config(ckpt, verbose=False):
     sd = pl_sd["state_dict"]
     return sd
 
-def sanitize_path(prompt_arr):
-    return [word.replace(":", "-") for word in prompt_arr]
-
 def load_img(path, h0, w0):
    
     image = Image.open(path).convert("RGB")
