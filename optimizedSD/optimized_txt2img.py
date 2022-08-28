@@ -190,6 +190,13 @@ parser.add_argument(
 parser.add_argument(
     "--precision", type=str, help="evaluate at this precision", choices=["full", "autocast"], default="autocast"
 )
+parser.add_argument(
+    "--format",
+    type=str,
+    help="output image format",
+    choices=["jpg", "png"],
+    default="png",
+)
 
 parser.add_argument(
     "--plms",
@@ -238,6 +245,11 @@ model.eval()
 model.unet_bs = opt.unet_bs
 model.cdevice = opt.device
 model.turbo = opt.turbo
+
+# As the model no longer self-seeds on initialization, we must do this should we
+# reject the built-in sampling method.
+if not opt.plms:
+    model.make_schedule(ddim_num_steps=opt.ddim_steps, ddim_eta=opt.ddim_eta, verbose=False)
 
 modelCS = instantiate_from_config(config.modelCondStage)
 _, _ = modelCS.load_state_dict(sd, strict=False)
@@ -355,7 +367,7 @@ with torch.no_grad():
                     x_sample = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                     x_sample = 255.0 * rearrange(x_sample[0].cpu().numpy(), "c h w -> h w c")
                     Image.fromarray(x_sample.astype(np.uint8)).save(
-                        os.path.join(sample_path, "seed_" + str(opt.seed) + "_" + f"{base_count:05}.png")
+                        os.path.join(sample_path, "seed_" + str(opt.seed) + "_" + f"{base_count:05}.{opt.format}")
                     )
                     seeds += str(opt.seed) + ","
                     opt.seed += 1
