@@ -107,7 +107,7 @@ function App() {
 
         <div className='flex flex-col place-items-center place-self-center w-full mb-2 md:mb-0'>
           <div className='bg-neutral-900 aspect-square w-1/2 w-1/2 mb-24'>
-            <img className='w-full h-full' src='noimg.png' alt='The placeholder for a generated image.'/>
+            <img className='w-full h-full' src='noimg.png' alt='The placeholder for our generated art.'/>
           </div>
 
           <div className='flex flex-col md:flex-row items-center w-full gap-y-2 md:px-24'>
