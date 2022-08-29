@@ -16,6 +16,8 @@ from torchvision.utils import make_grid
 import time
 from pytorch_lightning import seed_everything
 from torch import autocast
+import torch.nn as nn
+import k_diffusion as K
 from einops import rearrange, repeat
 from contextlib import nullcontext
 from ldm.util import instantiate_from_config
@@ -59,6 +61,18 @@ def load_img(image, h0, w0):
     image = torch.from_numpy(image)
     return 2.0 * image - 1.0
 
+class CFGDenoiser(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.inner_model = model
+
+    def forward(self, x, sigma, uncond, cond, cond_scale):
+        x_in = torch.cat([x] * 2)
+        sigma_in = torch.cat([sigma] * 2)
+        cond_in = torch.cat([uncond, cond])
+        uncond, cond = self.inner_model(x_in, sigma_in, cond=cond_in).chunk(2)
+        return uncond + (cond - uncond) * cond_scale
+
 config = "optimizedSD/v1-inference.yaml"
 ckpt = "models/ldm/stable-diffusion-v1/model.ckpt"
 sd = load_model_from_config(f"{ckpt}")
@@ -93,6 +107,8 @@ modelFS = instantiate_from_config(config.modelFirstStage)
 _, _ = modelFS.load_state_dict(sd, strict=False)
 modelFS.eval()
 del sd
+
+model_wrap = K.external.CompVisDenoiser(model)
 
 def generate(
     image,
@@ -172,6 +188,7 @@ def generate(
         for _ in trange(n_iter, desc="Sampling"):
             for prompts in tqdm(data, desc="data"):
                 with precision_scope("cuda"):
+                    model_wrap.to(device)
                     modelCS.to(device)
                     uc = None
                     if scale != 1.0:
@@ -199,18 +216,29 @@ def generate(
                         while torch.cuda.memory_allocated() / 1e6 >= mem:
                             time.sleep(1)
 
-                    # encode (scaled latent)
-                    z_enc = model.stochastic_encode(
-                        init_latent, torch.tensor([t_enc] * batch_size).to(device), seed, ddim_eta, ddim_steps
-                    )
-                    # decode it
-                    samples_ddim = model.decode(
-                        z_enc,
-                        c,
-                        t_enc,
-                        unconditional_guidance_scale=scale,
-                        unconditional_conditioning=uc,
-                    )
+                    sigmas = model_wrap.get_sigmas(ddim_steps)
+                    torch.manual_seed(seed) # changes manual seeding procedure
+                    # sigmas = K.sampling.get_sigmas_karras(opt.ddim_steps, sigma_min, sigma_max, device=device)
+                    noise = torch.randn_like(init_latent) * sigmas[ddim_steps - t_enc - 1] # for GPU draw
+                    xi = init_latent + noise
+                    sigma_sched = sigmas[ddim_steps - t_enc - 1:]
+                    # x = torch.randn([opt.n_samples, *shape]).to(device) * sigmas[0] # for CPU draw
+                    model_wrap_cfg = CFGDenoiser(model_wrap)
+                    extra_args = {'cond': c, 'uncond': uc, 'cond_scale': scale}
+                    samples_ddim = K.sampling.sample_lms(model_wrap_cfg, xi, sigma_sched, extra_args=extra_args, disable=False)
+
+                    # # encode (scaled latent)
+                    # z_enc = model.stochastic_encode(
+                    #     init_latent, torch.tensor([t_enc] * batch_size).to(device), seed, ddim_eta, ddim_steps
+                    # )
+                    # # decode it
+                    # samples_ddim = model.decode(
+                    #     z_enc,
+                    #     c,
+                    #     t_enc,
+                    #     unconditional_guidance_scale=scale,
+                    #     unconditional_conditioning=uc,
+                    # )
 
                     modelFS.to(device)
                     print("saving images")

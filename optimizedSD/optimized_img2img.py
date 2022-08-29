@@ -12,11 +12,11 @@ import time
 from pytorch_lightning import seed_everything
 from torch import autocast
 import torch.nn as nn
+import k_diffusion as K
 from contextlib import contextmanager, nullcontext
 from einops import rearrange, repeat
 from ldm.util import instantiate_from_config
 from optimUtils import split_weighted_subprompts, logger
-import k_diffusion as K
 from transformers import logging
 import pandas as pd
 logging.set_verbosity_error()

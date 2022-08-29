@@ -18,6 +18,8 @@ from torchvision.utils import make_grid
 import time
 from pytorch_lightning import seed_everything
 from torch import autocast
+import torch.nn as nn
+import k_diffusion as K
 from contextlib import nullcontext
 from ldm.util import instantiate_from_config
 from optimUtils import split_weighted_subprompts, logger
@@ -40,6 +42,18 @@ def load_model_from_config(ckpt, verbose=False):
         print(f"Global Step: {pl_sd['global_step']}")
     sd = pl_sd["state_dict"]
     return sd
+
+class CFGDenoiser(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.inner_model = model
+
+    def forward(self, x, sigma, uncond, cond, cond_scale):
+        x_in = torch.cat([x] * 2)
+        sigma_in = torch.cat([sigma] * 2)
+        cond_in = torch.cat([uncond, cond])
+        uncond, cond = self.inner_model(x_in, sigma_in, cond=cond_in).chunk(2)
+        return uncond + (cond - uncond) * cond_scale
 
 config = "optimizedSD/v1-inference.yaml"
 ckpt = "models/ldm/stable-diffusion-v1/model.ckpt"
@@ -76,6 +90,8 @@ _, _ = modelFS.load_state_dict(sd, strict=False)
 modelFS.eval()
 del sd
 
+model_wrap = K.external.CompVisDenoiser(model)
+sigma_min, sigma_max = model_wrap.sigmas[0].item(), model_wrap.sigmas[-1].item()
 
 def generate(
     prompt,
@@ -140,6 +156,7 @@ def generate(
         for _ in trange(n_iter, desc="Sampling"):
             for prompts in tqdm(data, desc="data"):
                 with precision_scope("cuda"):
+                    model_wrap.to(device)
                     modelCS.to(device)
                     uc = None
                     if scale != 1.0:
@@ -168,18 +185,30 @@ def generate(
                         while torch.cuda.memory_allocated() / 1e6 >= mem:
                             time.sleep(1)
 
-                    samples_ddim = model.sample(
-                        S=ddim_steps,
-                        conditioning=c,
-                        batch_size=batch_size,
-                        seed=seed,
-                        shape=shape,
-                        verbose=False,
-                        unconditional_guidance_scale=scale,
-                        unconditional_conditioning=uc,
-                        eta=ddim_eta,
-                        x_T=start_code,
-                    )
+                    # Conversion to k_lms begins in proper here.
+                    model.make_schedule(ddim_num_steps=ddim_steps, ddim_eta=ddim_eta, verbose=False)
+                    sigmas = model_wrap.get_sigmas(ddim_steps)
+                    model_wrap_cfg = CFGDenoiser(model_wrap)
+
+                    torch.manual_seed(seed)
+
+                    x = torch.randn([batch_size, *shape], device=device) * sigmas[0]
+                    extra_args = {'cond': c, 'uncond': uc, 'cond_scale': scale}
+                    
+                    samples_ddim = K.sampling.sample_lms(model_wrap_cfg, x, sigmas, extra_args=extra_args, disable=False)
+
+                    # samples_ddim = model.sample(
+                    #     S=ddim_steps,
+                    #     conditioning=c,
+                    #     batch_size=batch_size,
+                    #     seed=seed,
+                    #     shape=shape,
+                    #     verbose=False,
+                    #     unconditional_guidance_scale=scale,
+                    #     unconditional_conditioning=uc,
+                    #     eta=ddim_eta,
+                    #     x_T=start_code,
+                    # )
 
                     modelFS.to(device)
                     print("saving images")
