@@ -16,8 +16,6 @@ from torchvision.utils import make_grid
 import time
 from pytorch_lightning import seed_everything
 from torch import autocast
-import torch.nn as nn
-import k_diffusion as K
 from einops import rearrange, repeat
 from contextlib import nullcontext
 from ldm.util import instantiate_from_config
@@ -61,17 +59,30 @@ def load_img(image, h0, w0):
     image = torch.from_numpy(image)
     return 2.0 * image - 1.0
 
-class CFGDenoiser(nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.inner_model = model
 
-    def forward(self, x, sigma, uncond, cond, cond_scale):
-        x_in = torch.cat([x] * 2)
-        sigma_in = torch.cat([sigma] * 2)
-        cond_in = torch.cat([uncond, cond])
-        uncond, cond = self.inner_model(x_in, sigma_in, cond=cond_in).chunk(2)
-        return uncond + (cond - uncond) * cond_scale
+def load_mask(mask, h0, w0, invert=False):
+   
+    image = mask.convert("RGB")
+    w, h = image.size
+    print(f"loaded input image of size ({w}, {h})")   
+    if(h0 is not None and w0 is not None):
+        h, w = h0, w0
+    
+    w, h = map(lambda x: x - x % 64, (w, h))  # resize to integer multiple of 32
+
+    print(f"New image size ({w}, {h})")
+    image = image.resize((64, 64), resample = Image.LANCZOS)
+    image = np.array(image)
+
+    if invert:
+        print("inverted")
+        where_0, where_1 = np.where(image == 0),np.where(image == 255)
+        image[where_0], image[where_1] = 255, 0
+    image = image.astype(np.float32)/255.0 
+    image = image[None].transpose(0, 3, 1, 2)
+    image = torch.from_numpy(image)
+    return image
+
 
 config = "optimizedSD/v1-inference.yaml"
 ckpt = "models/ldm/stable-diffusion-v1/model.ckpt"
@@ -108,12 +119,11 @@ _, _ = modelFS.load_state_dict(sd, strict=False)
 modelFS.eval()
 del sd
 
-model_wrap = K.external.CompVisDenoiser(model)
-
 def generate(
     image,
     prompt,
     strength,
+    latent_scale,
     ddim_steps,
     n_iter,
     batch_size,
@@ -136,9 +146,11 @@ def generate(
     seed_everything(seed)
 
     # Logging
-    logger(locals(), log_csv = "logs/img2img_gradio_logs.csv")
+    logger(locals(), log_csv = "logs/inpaint_gradio_logs.csv")
 
-    init_image = load_img(image, Height, Width).to(device)
+    init_image = load_img(image['image'], Height, Width).to(device)
+    mask = load_mask(image['mask'], Height, Width, True).to(device)
+
     model.unet_bs = unet_bs
     model.turbo = turbo
     model.cdevice = device
@@ -149,6 +161,10 @@ def generate(
         modelCS.half()
         modelFS.half()
         init_image = init_image.half()
+        mask.half()
+
+    mask = mask[0][0].unsqueeze(0).repeat(4,1,1).unsqueeze(0)
+    mask = repeat(mask, '1 ... -> b ...', b=batch_size)
 
     tic = time.time()
     os.makedirs(outdir, exist_ok=True)
@@ -163,8 +179,9 @@ def generate(
 
     modelFS.to(device)
 
-    init_image = repeat(init_image, "1 ... -> b ...", b=batch_size)
     init_latent = modelFS.get_first_stage_encoding(modelFS.encode_first_stage(init_image))  # move to latent space
+    init_latent = repeat(init_latent, "1 ... -> b ...", b=batch_size)
+    scaled_latent = latent_scale * init_latent
 
     if device != "cpu":
         mem = torch.cuda.memory_allocated() / 1e6
@@ -172,7 +189,10 @@ def generate(
         while torch.cuda.memory_allocated() / 1e6 >= mem:
             time.sleep(1)
 
-    assert 0.0 <= strength <= 1.0, "can only work with strength in [0.0, 1.0]"
+    if strength == 1:
+        print("strength should be less than 1, setting it to 0.999")
+        strength = 0.999
+    assert 0.0 <= strength < 1.0, "can only work with strength in [0.0, 1.0]"
     t_enc = int(strength * ddim_steps)
     print(f"target t_enc is {t_enc} steps")
 
@@ -188,7 +208,6 @@ def generate(
         for _ in trange(n_iter, desc="Sampling"):
             for prompts in tqdm(data, desc="data"):
                 with precision_scope("cuda"):
-                    model_wrap.to(device)
                     modelCS.to(device)
                     uc = None
                     if scale != 1.0:
@@ -215,29 +234,21 @@ def generate(
                         while torch.cuda.memory_allocated() / 1e6 >= mem:
                             time.sleep(1)
 
-                    sigmas = model_wrap.get_sigmas(ddim_steps)
-                    torch.manual_seed(seed) # changes manual seeding procedure
-                    # sigmas = K.sampling.get_sigmas_karras(opt.ddim_steps, sigma_min, sigma_max, device=device)
-                    noise = torch.randn_like(init_latent) * sigmas[ddim_steps - t_enc - 1] # for GPU draw
-                    xi = init_latent + noise
-                    sigma_sched = sigmas[ddim_steps - t_enc - 1:]
-                    # x = torch.randn([opt.n_samples, *shape]).to(device) * sigmas[0] # for CPU draw
-                    model_wrap_cfg = CFGDenoiser(model_wrap)
-                    extra_args = {'cond': c, 'uncond': uc, 'cond_scale': scale}
-                    samples_ddim = K.sampling.sample_lms(model_wrap_cfg, xi, sigma_sched, extra_args=extra_args, disable=False)
-
-                    # # encode (scaled latent)
-                    # z_enc = model.stochastic_encode(
-                    #     init_latent, torch.tensor([t_enc] * batch_size).to(device), seed, ddim_eta, ddim_steps
-                    # )
-                    # # decode it
-                    # samples_ddim = model.decode(
-                    #     z_enc,
-                    #     c,
-                    #     t_enc,
-                    #     unconditional_guidance_scale=scale,
-                    #     unconditional_conditioning=uc,
-                    # )
+                    # encode (scaled latent)
+                    z_enc = model.stochastic_encode(
+                        scaled_latent, torch.tensor([t_enc] * batch_size).to(device),
+                        seed, ddim_eta, ddim_steps)
+                                       
+                    # decode it
+                    samples_ddim = model.decode(
+                        z_enc,
+                        c,
+                        t_enc,
+                        unconditional_guidance_scale=scale,
+                        unconditional_conditioning=uc,
+                        mask = mask,
+                        init_latent = init_latent
+                    )
 
                     modelFS.to(device)
                     print("saving images")
@@ -280,15 +291,16 @@ def generate(
         + "\nSeeds used = "
         + seeds[:-1]
     )
-    return Image.fromarray(grid.astype(np.uint8)), txt
+    return Image.fromarray(grid.astype(np.uint8)), image['mask'],txt
 
 
 demo = gr.Interface(
     fn=generate,
     inputs=[
-        gr.Image(tool="editor", type="pil"),
+        gr.Image(tool="sketch", type="pil"),
         "text",
-        gr.Slider(0, 1, value=0.75),
+        gr.Slider(0, 0.99, value=0.99, step = 0.01),
+        gr.Slider(0, 1, value=1),
         gr.Slider(1, 1000, value=50),
         gr.Slider(1, 100, step=1),
         gr.Slider(1, 100, step=1),
@@ -299,11 +311,11 @@ demo = gr.Interface(
         gr.Slider(1, 2, value=1, step=1),
         gr.Text(value="cuda"),
         "text",
-        gr.Text(value="outputs/img2img-samples"),
+        gr.Text(value="outputs/inpaint-samples"),
         gr.Radio(["png", "jpg"], value='png'),
         "checkbox",
         "checkbox",
     ],
-    outputs=["image", "text"],
+    outputs=["image", "image", "text"],
 )
 demo.launch()
