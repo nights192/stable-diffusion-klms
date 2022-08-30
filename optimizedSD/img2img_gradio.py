@@ -18,6 +18,7 @@ from pytorch_lightning import seed_everything
 from torch import autocast
 import torch.nn as nn
 import k_diffusion as K
+from klms.sampling import CFGDenoiser
 from einops import rearrange, repeat
 from contextlib import nullcontext
 from ldm.util import instantiate_from_config
@@ -60,18 +61,6 @@ def load_img(image, h0, w0):
     image = image[None].transpose(0, 3, 1, 2)
     image = torch.from_numpy(image)
     return 2.0 * image - 1.0
-
-class CFGDenoiser(nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.inner_model = model
-
-    def forward(self, x, sigma, uncond, cond, cond_scale):
-        x_in = torch.cat([x] * 2)
-        sigma_in = torch.cat([sigma] * 2)
-        cond_in = torch.cat([uncond, cond])
-        uncond, cond = self.inner_model(x_in, sigma_in, cond=cond_in).chunk(2)
-        return uncond + (cond - uncond) * cond_scale
 
 config = "optimizedSD/v1-inference.yaml"
 ckpt = "models/ldm/stable-diffusion-v1/model.ckpt"

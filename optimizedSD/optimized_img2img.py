@@ -13,6 +13,7 @@ from pytorch_lightning import seed_everything
 from torch import autocast
 import torch.nn as nn
 import k_diffusion as K
+from klms.sampling import CFGDenoiser
 from contextlib import contextmanager, nullcontext
 from einops import rearrange, repeat
 from ldm.util import instantiate_from_config
@@ -20,18 +21,6 @@ from optimUtils import split_weighted_subprompts, logger
 from transformers import logging
 import pandas as pd
 logging.set_verbosity_error()
-
-class CFGDenoiser(nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.inner_model = model
-
-    def forward(self, x, sigma, uncond, cond, cond_scale):
-        x_in = torch.cat([x] * 2)
-        sigma_in = torch.cat([sigma] * 2)
-        cond_in = torch.cat([uncond, cond])
-        uncond, cond = self.inner_model(x_in, sigma_in, cond=cond_in).chunk(2)
-        return uncond + (cond - uncond) * cond_scale
 
 def chunk(it, size):
     it = iter(it)
