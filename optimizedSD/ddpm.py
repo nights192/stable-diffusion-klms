@@ -665,10 +665,10 @@ class UNet(DDPM):
 
 
     @torch.no_grad()
-    def stochastic_encode(self, x0, t, seed, ddim_steps,use_original_steps=False, noise=None, mask=None):
+    def stochastic_encode(self, x0, t, seed, ddim_eta,ddim_steps,use_original_steps=False, noise=None, mask=None):
         # fast, but does not allow for exact reconstruction
         # t serves as an index to gather the correct alphas
-        self.make_schedule(ddim_num_steps=ddim_steps, ddim_eta=0.0, verbose=False)
+        self.make_schedule(ddim_num_steps=ddim_steps, ddim_eta=ddim_eta, verbose=False)
 
         if use_original_steps:
             sqrt_alphas_cumprod = self.sqrt_alphas_cumprod
