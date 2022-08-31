@@ -16,12 +16,10 @@ class CFGDenoiser(nn.Module):
         return uncond + (cond - uncond) * cond_scale
 
 @torch.no_grad()
-def sample_lms(model, x, sigmas, extra_args=None, callback=None, disable=None, order=4, mask=None):
+def sample_lms(model, x, sigmas, extra_args=None, callback=None, disable=None, order=4, x0=None, mask=None):
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
     ds = []
-
-    x0 = x.clone()
 
     for i in trange(len(sigmas) - 1, disable=disable):
         denoised = model(x, sigmas[i] * s_in, **extra_args)

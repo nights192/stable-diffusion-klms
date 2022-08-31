@@ -243,12 +243,12 @@ def generate(
                     torch.manual_seed(seed) # changes manual seeding procedure
                     # sigmas = K.sampling.get_sigmas_karras(opt.ddim_steps, sigma_min, sigma_max, device=device)
                     noise = torch.randn_like(init_latent) * sigmas[ddim_steps - t_enc - 1] # for GPU draw
-                    xi = init_latent * mask + (1. - mask) * (init_latent + noise)
+                    xi = init_latent + noise
                     sigma_sched = sigmas[ddim_steps - t_enc - 1:]
                     # x = torch.randn([opt.n_samples, *shape]).to(device) * sigmas[0] # for CPU draw
                     model_wrap_cfg = CFGDenoiser(model_wrap)
                     extra_args = {'cond': c, 'uncond': uc, 'cond_scale': scale}
-                    samples_ddim = sample_lms(model_wrap_cfg, xi, sigma_sched, extra_args=extra_args, disable=False, mask=mask)
+                    samples_ddim = sample_lms(model_wrap_cfg, xi, sigma_sched, extra_args=extra_args, disable=False, x0=init_latent, mask=mask)
 
                     # # encode (scaled latent)
                     # z_enc = model.stochastic_encode(
