@@ -2,6 +2,8 @@ from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+import uuid
+
 app = FastAPI()
 
 origins = [
@@ -25,6 +27,8 @@ async def read_root() -> dict:
 async def image_endpoint(websocket: WebSocket):
     await websocket.accept()
 
+    id = uuid.uuid4()
+
     while True:
         img_req = await websocket.receive_json()
-        await websocket.send_json({ "msg": "Silly." })
+        await websocket.send_json(img_req)
