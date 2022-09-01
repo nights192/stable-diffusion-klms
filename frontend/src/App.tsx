@@ -3,6 +3,25 @@ import Button from './components/button';
 import FreezableSeedInput from './components/freezable-seed-input';
 import Prompt from './components/prompt';
 import RangeInput from './components/range-input';
+import useSocket from './hooks/use-socket';
+
+function openConnection(ws: WebSocket, event: Event) {
+}
+
+function receiveMessage(ws: WebSocket, event: MessageEvent) {
+  const response = JSON.parse(event.data);
+
+  console.log(response)
+}
+
+function send(
+  ws: WebSocket, width: number, height: number, cfgScale: number,
+  steps: number, numImages: number, seed: number, prompt: string
+) {
+  const imageRequest = { width, height, cfgScale, steps, numImages, seed, prompt };
+
+  ws.send(JSON.stringify(imageRequest));
+}
 
 // Perhaps a use-case for contexts; however,
 // given how shallow this code-base is, such architecture
@@ -67,7 +86,11 @@ function App() {
   const [seed, setSeed] = useState(43);
   const [seedLocked, setSeedLocked] = useState(false);
 
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState('');
+  const [image, setImage] = useState('/noimage.png');
+
+  // For whatever 
+  const [ws, connection] = useSocket('ws://127.0.0.1:8000/channel', openConnection, receiveMessage) as [React.MutableRefObject<WebSocket | null>, number];
 
   return (
     <>
@@ -107,13 +130,20 @@ function App() {
 
         <div className='flex flex-col place-items-center place-self-center w-full mb-2 md:mb-0'>
           <div className='bg-neutral-900 aspect-square w-1/2 w-1/2 mb-24'>
-            <img className='w-full h-full' src='noimg.png' alt='The placeholder for our generated art.'/>
+            <img className='w-full h-full' src={image} alt='The placeholder for our generated art.'/>
           </div>
 
           <div className='flex flex-col md:flex-row items-center w-full gap-y-2 md:px-24'>
             <Prompt value={prompt} setValue={setPrompt} />
 
-            <Button>Create</Button>
+            <Button
+              onClick={() => {
+                if (ws.current !== null)
+                  send(ws.current, width, height, cfgScale, steps, numImages, seed, prompt);
+              }}
+            >
+              Create
+            </Button>
           </div>
         </div>
       </div>
