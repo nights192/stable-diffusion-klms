@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 
-
+// TODO: Implement increasing reconnect delays.
 export default function useSocket(address: string, onOpen: (ws: WebSocket, event: Event) => void, onMessage: (ws: WebSocket, event: MessageEvent) => void) {
     const [connected, setConnected] = useState(false);
     const ws = useRef<WebSocket | null>(null);

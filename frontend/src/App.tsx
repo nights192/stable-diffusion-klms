@@ -87,7 +87,7 @@ function App() {
   const [seedLocked, setSeedLocked] = useState(false);
 
   const [prompt, setPrompt] = useState('');
-  const [image, setImage] = useState('/noimage.png');
+  const [image, setImage] = useState('/noimg.png');
 
   // For whatever 
   const [ws, connection] = useSocket('ws://127.0.0.1:8000/channel', openConnection, receiveMessage) as [React.MutableRefObject<WebSocket | null>, number];

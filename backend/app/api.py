@@ -2,8 +2,13 @@ from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+import asyncio
 import uuid
 
+from .lib.client_queue import UUIDPresentError, ClientQueue
+from .lib.ai import txt2img
+
+queue = ClientQueue()
 app = FastAPI()
 
 origins = [
@@ -27,8 +32,19 @@ async def read_root() -> dict:
 async def image_endpoint(websocket: WebSocket):
     await websocket.accept()
 
+    # A brittle method of validating the current transaction client,
+    # but sufficient for such an isolated use-case.
     id = uuid.uuid4()
 
     while True:
         img_req = await websocket.receive_json()
-        await websocket.send_json(img_req)
+
+        try:
+            execRes = await queue.execute(id, 600.0, txt2img, img_req)
+            await websocket.send_json({**{ "success": True }, **img_req})
+        
+        except UUIDPresentError:
+            await websocket.send_json({ "success": False, "reason": "Already waiting on a task." })
+        
+        except asyncio.TimeoutError:
+            await websocket.send_json({ "success": False, "reason": "Generation timed out." })

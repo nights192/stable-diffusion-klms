@@ -1,4 +1,3 @@
-import gradio as gr
 import numpy as np
 import torch
 from torchvision.utils import make_grid
@@ -6,82 +5,30 @@ from einops import rearrange
 import os, re
 from PIL import Image
 import torch
-import pandas as pd
 import numpy as np
 from random import randint
 from omegaconf import OmegaConf
 from PIL import Image
 from tqdm import tqdm, trange
-from itertools import islice
 from einops import rearrange
 from torchvision.utils import make_grid
 import time
 from pytorch_lightning import seed_everything
 from torch import autocast
-import torch.nn as nn
 import k_diffusion as K
 from optimizedSD.klms.sampling import CFGDenoiser
 from contextlib import nullcontext
-from ldm.util import instantiate_from_config
 from optimizedSD.optimUtils import split_weighted_subprompts, logger
 from transformers import logging
+from typing import List
+
 logging.set_verbosity_error()
-import mimetypes
-mimetypes.init()
-mimetypes.add_type("application/javascript", ".js")
-
-def chunk(it, size):
-    it = iter(it)
-    return iter(lambda: tuple(islice(it, size)), ())
-
-
-def load_model_from_config(ckpt, verbose=False):
-    print(f"Loading model from {ckpt}")
-    pl_sd = torch.load(ckpt, map_location="cpu")
-    if "global_step" in pl_sd:
-        print(f"Global Step: {pl_sd['global_step']}")
-    sd = pl_sd["state_dict"]
-    return sd
-
-config = "optimizedSD/v1-inference.yaml"
-ckpt = "models/ldm/stable-diffusion-v1/model.ckpt"
-sd = load_model_from_config(f"{ckpt}")
-li, lo = [], []
-for key, v_ in sd.items():
-    sp = key.split(".")
-    if (sp[0]) == "model":
-        if "input_blocks" in sp:
-            li.append(key)
-        elif "middle_block" in sp:
-            li.append(key)
-        elif "time_embed" in sp:
-            li.append(key)
-        else:
-            lo.append(key)
-for key in li:
-    sd["model1." + key[6:]] = sd.pop(key)
-for key in lo:
-    sd["model2." + key[6:]] = sd.pop(key)
-
-config = OmegaConf.load(f"{config}")
-
-model = instantiate_from_config(config.modelUNet)
-_, _ = model.load_state_dict(sd, strict=False)
-model.eval()
-
-modelCS = instantiate_from_config(config.modelCondStage)
-_, _ = modelCS.load_state_dict(sd, strict=False)
-modelCS.eval()
-
-modelFS = instantiate_from_config(config.modelFirstStage)
-_, _ = modelFS.load_state_dict(sd, strict=False)
-modelFS.eval()
-del sd
-
-model_wrap = K.external.CompVisDenoiser(model)
-sigma_min, sigma_max = model_wrap.sigmas[0].item(), model_wrap.sigmas[-1].item()
 
 def generate(
+    model,
+    modelCS,
+    modelFS,
+    model_wrap,
     prompt,
     ddim_steps,
     n_iter,
@@ -93,8 +40,6 @@ def generate(
     unet_bs,
     device,
     seed,
-    outdir,
-    img_format,
     turbo,
     full_precision,
 ):
@@ -118,11 +63,6 @@ def generate(
         modelCS.half()
 
     tic = time.time()
-    os.makedirs(outdir, exist_ok=True)
-    outpath = outdir
-    sample_path = os.path.join(outpath, "_".join(re.split(":| ", prompt)))[:150]
-    os.makedirs(sample_path, exist_ok=True)
-    base_count = len(os.listdir(sample_path))
     
     # n_rows = opt.n_rows if opt.n_rows > 0 else batch_size
     assert prompt is not None
@@ -133,6 +73,7 @@ def generate(
     else:
         precision_scope = nullcontext
 
+    results: List[Image.Image] = []
     all_samples = []
     seeds = ""
     with torch.no_grad():
@@ -197,15 +138,14 @@ def generate(
 
                     modelFS.to(device)
                     print("saving images")
+
                     for i in range(batch_size):
 
                         x_samples_ddim = modelFS.decode_first_stage(samples_ddim[i].unsqueeze(0))
                         x_sample = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                         all_samples.append(x_sample.to("cpu"))
                         x_sample = 255.0 * rearrange(x_sample[0].cpu().numpy(), "c h w -> h w c")
-                        Image.fromarray(x_sample.astype(np.uint8)).save(
-                            os.path.join(sample_path, "seed_" + str(seed) + "_" + f"{base_count:05}.{img_format}")
-                        )
+                        results.append(Image.fromarray(x_sample.astype(np.uint8)))
                         seeds += str(seed) + ","
                         seed += 1
                         base_count += 1
@@ -220,8 +160,4 @@ def generate(
                     del x_sample
                     del x_samples_ddim
 
-    grid = torch.cat(all_samples, 0)
-    grid = make_grid(grid, nrow=n_iter)
-    grid = 255.0 * rearrange(grid, "c h w -> h w c").cpu().numpy()
-
-    return Image.fromarray(grid.astype(np.uint8))
+    return results
