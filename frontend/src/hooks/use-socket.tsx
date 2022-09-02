@@ -32,6 +32,8 @@ export default function useSocket(address: string, onOpen: (ws: WebSocket, event
 
             ws.current.onopen = onOpenInternal;
 
+            ws.current.onmessage = onMessageInternal;
+
             ws.current.onclose = () => {
                 setConnected(false);
 
