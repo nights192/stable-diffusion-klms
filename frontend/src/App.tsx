@@ -89,8 +89,7 @@ function App() {
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState('/noimg.png');
 
-  // For whatever 
-  const [ws, connection] = useSocket('ws://127.0.0.1:8000/channel', openConnection, receiveMessage) as [React.MutableRefObject<WebSocket | null>, number];
+  const [ws, connected] = useSocket('ws://127.0.0.1:8000/channel', openConnection, receiveMessage) as [React.MutableRefObject<WebSocket | null>, boolean];
 
   return (
     <>
@@ -141,6 +140,8 @@ function App() {
                 if (ws.current !== null)
                   send(ws.current, width, height, cfgScale, steps, numImages, seed, prompt);
               }}
+
+              active={connected}
             >
               Create
             </Button>
