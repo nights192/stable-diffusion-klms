@@ -9,15 +9,22 @@ function reconnectGrowth(x: number) {
 }
 
 // Schedules an attempt to reconnect with a websocket.
+// Leveraging ref object to ensure continuity of reference to our
+// active socket object.
 function reconnect(
-    ws: WebSocket, address: string, onMessage: OnMessageDelegate,
+    ws: React.MutableRefObject<WebSocket | null>, address: string, onMessage: OnMessageDelegate,
     initSocket: InitSocketDelegate, oldWait: number, newWait: number
 ) {
     setTimeout(() => {
-        if (ws.readyState !== WebSocket.CONNECTING ||
-                ws.readyState !== WebSocket.OPEN)
+        if (ws.current !== null) {
+            const socket = ws.current;
+            console.log(socket.readyState);
 
-            initSocket(address, onMessage, newWait);
+            if (socket.readyState !== WebSocket.CONNECTING &&
+                    socket.readyState !== WebSocket.OPEN)
+
+                initSocket(address, onMessage, newWait);
+        }
     }, oldWait);
 }
 
@@ -35,11 +42,13 @@ export default function useSocket(address: string, onOpen: (ws: WebSocket, event
                 setConnected(true);
                 onOpen(this, event);
 
+                console.log("Reconnected!");
+
                 this.onclose = () => {
                     setConnected(false);
 
                     if (ws.current !== null)
-                        reconnect(ws.current, address, onMessage, initSocket, 1000, reconnectGrowth(1000));
+                        reconnect(ws, address, onMessage, initSocket, 1000, reconnectGrowth(1000));
                 }
             }
 
@@ -51,16 +60,18 @@ export default function useSocket(address: string, onOpen: (ws: WebSocket, event
             ws.current.onmessage = onMessageInternal;
 
             ws.current.onclose = () => {
+                console.log("Disconnected!");
+
                 setConnected(false);
 
                 if (ws.current !== null)
-                    reconnect(ws.current, address, onMessage, initSocket, initReconnect, reconnectGrowth(initReconnect));
+                    reconnect(ws, address, onMessage, initSocket, initReconnect, reconnectGrowth(initReconnect));
             };
         }
 
         const focusEvent = () => {
             if (ws.current !== null)
-                reconnect(ws.current, address, onMessage, initSocket, 1000, reconnectGrowth(1000));
+                reconnect(ws, address, onMessage, initSocket, 1000, reconnectGrowth(1000));
         };
 
         if (ws.current === null) initSocket(address, onMessage);
