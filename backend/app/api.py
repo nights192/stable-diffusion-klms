@@ -41,7 +41,7 @@ async def image_endpoint(websocket: WebSocket):
 
         try:
             execRes = await queue.execute(id, 600.0, txt2img, img_req)
-            await websocket.send_json({**{ "success": True }, **img_req})
+            await websocket.send_json({ "success": True, "images": execRes })
         
         except UUIDPresentError:
             await websocket.send_json({ "success": False, "reason": "Already waiting on a task." })

@@ -4,12 +4,19 @@ import FreezableSeedInput from './components/freezable-seed-input';
 import Prompt from './components/prompt';
 import RangeInput from './components/range-input';
 import useSocket from './hooks/use-socket';
+import { genRandomSeed } from './libs/utils';
+
+type ServerResponse = { success: true, images: Array<string> } | { success: false, reason: string }
 
 function openConnection(ws: WebSocket, event: Event) {
 }
 
-function receiveMessage(ws: WebSocket, event: MessageEvent) {
-  const response = JSON.parse(event.data);
+function receiveMessage(ws: WebSocket, event: MessageEvent, setImage: React.Dispatch<React.SetStateAction<string>>) {
+  const response: ServerResponse = JSON.parse(event.data);
+
+  if (response.success) {
+    setImage(response.images[0]);
+  }
 
   console.log(response)
 }
@@ -83,13 +90,13 @@ function App() {
   const [cfgScale, setCfgScale] = useState(7);
   const [steps, setSteps] = useState(50);
   const [numImages, setNumImages] = useState(1);
-  const [seed, setSeed] = useState(43);
+  const [seed, setSeed] = useState(genRandomSeed());
   const [seedLocked, setSeedLocked] = useState(false);
 
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState('/noimg.png');
 
-  const [ws, connected] = useSocket('ws://127.0.0.1:8000/channel', openConnection, receiveMessage) as [React.MutableRefObject<WebSocket | null>, boolean];
+  const [ws, connected] = useSocket('ws://127.0.0.1:8000/channel', openConnection, (ws: WebSocket, event: MessageEvent) => receiveMessage(ws, event, setImage)) as [React.MutableRefObject<WebSocket | null>, boolean];
 
   return (
     <>
@@ -137,8 +144,12 @@ function App() {
 
             <Button
               onClick={() => {
-                if (ws.current !== null)
+                if (ws.current !== null) {
+                  if (!seedLocked)
+                    setSeed(genRandomSeed());
+                  
                   send(ws.current, width, height, cfgScale, steps, numImages, seed, prompt);
+                }
               }}
 
               active={connected}

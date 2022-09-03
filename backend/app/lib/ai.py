@@ -66,8 +66,14 @@ def load_model():
     return (model, modelCS, modelFS, model_wrap)
 
 def txt2img(argTable):
-    load_model()
+    prompt = argTable["prompt"]
+    ddim_steps = argTable["steps"]
+    batch_size = argTable["numImages"]
+    height = argTable["height"]
+    width = argTable["width"]
+    scale = argTable["cfgScale"]
+    seed = argTable["seed"]
 
-    ## TODO: Run the actual generation.
-
-    print("Okay!")
+    return image_array_to_hex(
+        text_generate(*load_model(), prompt, ddim_steps, 1, batch_size, height, width, scale, 0, 1, "cuda", seed, False, False)
+    )

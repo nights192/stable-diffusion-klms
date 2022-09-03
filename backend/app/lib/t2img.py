@@ -148,7 +148,6 @@ def generate(
                         results.append(Image.fromarray(x_sample.astype(np.uint8)))
                         seeds += str(seed) + ","
                         seed += 1
-                        base_count += 1
 
                     if device != "cpu":
                         mem = torch.cuda.memory_allocated() / 1e6

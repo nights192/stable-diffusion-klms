@@ -1,4 +1,5 @@
 import io
+import base64
 from typing import List
 from PIL import Image
 
@@ -9,10 +10,12 @@ def image_array_to_hex(images: List[Image.Image]):
     results = []
 
     for image in images:
-        imageData = io.StringIO() # Uncertain as to whether this is cleared on write by save; better safe than sorry.
+        imageData = io.BytesIO() # Uncertain as to whether this is cleared on write by save; better safe than sorry.
         image.save(imageData, "png")
 
-        results.append(imageData.getvalue())
+        base64String = base64.b64encode(imageData.getvalue()).decode("utf-8")
+
+        results.append(f"data:image/png;base64, {base64String}")
         imageData.close()
 
     return results
