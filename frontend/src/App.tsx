@@ -4,7 +4,7 @@ import FreezableSeedInput from './components/freezable-seed-input';
 import Prompt from './components/prompt';
 import RangeInput from './components/range-input';
 import useSocket from './hooks/use-socket';
-import { genRandomSeed } from './libs/utils';
+import { fetchHost, genRandomSeed } from './libs/utils';
 
 type ServerResponse = { success: true, images: Array<string> } | { success: false, reason: string }
 
@@ -96,7 +96,7 @@ function App() {
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState('/noimg.png');
 
-  const [ws, connected] = useSocket('ws://127.0.0.1:8000/channel', openConnection, (ws: WebSocket, event: MessageEvent) => receiveMessage(ws, event, setImage)) as [React.MutableRefObject<WebSocket | null>, boolean];
+  const [ws, connected] = useSocket(`ws://${fetchHost()}/channel`, openConnection, (ws: WebSocket, event: MessageEvent) => receiveMessage(ws, event, setImage)) as [React.MutableRefObject<WebSocket | null>, boolean];
 
   return (
     <>
