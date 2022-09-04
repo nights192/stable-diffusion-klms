@@ -1,11 +1,11 @@
-function ImageDisplay({ images }: { images: Array<String> }) {
+function ImageDisplay({ images }: { images: string[] }) {
     let imageNodes = []
 
-    for (const [i, image] of images) {
-        imageNodes.push(<img src={image} alt='A generated image placeholder.'/>);
+    for (const [i, image] of images.entries()) {
+        imageNodes.push(<img src={image} alt='Our generated art placeholder.' className='flex-initial min-w-0 w-full md:w-1/2' key={i}/>);
     }
 
-    return <div className='flex w-full h-full' >
+    return <div className='flex flex-col md:flex-row w-full h-full items-center gap-4 place-content-center' >
         {imageNodes}
     </div>;
 }

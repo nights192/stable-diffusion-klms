@@ -6,17 +6,18 @@ import RangeInput from './components/range-input';
 import PromptForm from './components/prompt-form';
 import useSocket from './hooks/use-socket';
 import { fetchHost, genRandomSeed } from './libs/utils';
+import ImageDisplay from './components/image-display';
 
 type ServerResponse = { success: true, images: Array<string> } | { success: false, reason: string }
 
 function openConnection(ws: WebSocket, event: Event) {
 }
 
-function receiveMessage(ws: WebSocket, event: MessageEvent, setImage: React.Dispatch<React.SetStateAction<string>>) {
+function receiveMessage(ws: WebSocket, event: MessageEvent, setImage: React.Dispatch<React.SetStateAction<string[]>>) {
   const response: ServerResponse = JSON.parse(event.data);
 
   if (response.success) {
-    setImage(response.images[0]);
+    setImage(response.images);
   }
 
   console.log(response)
@@ -30,58 +31,6 @@ function send(
 
   ws.send(JSON.stringify(imageRequest));
 }
-
-/*
-
-// Perhaps a use-case for contexts; however,
-// given how shallow this code-base is, such architecture
-// seems a tad wasteful.
-function PromptForm({
-  minDim, maxDim, maxCfg, maxSteps, maxImages,
-
-  width, setWidth, height, setHeight, cfgScale, setCfgScale, steps,
-  setSteps, numImages, setNumImages, seed, setSeed, seedLocked, setSeedLocked
-}: {
-  minDim: number, maxDim: number, maxCfg: number, maxSteps: number, maxImages: number,
-
-  width: number, setWidth: React.Dispatch<React.SetStateAction<number>>,
-  height: number, setHeight: React.Dispatch<React.SetStateAction<number>>,
-  cfgScale: number, setCfgScale: React.Dispatch<React.SetStateAction<number>>,
-  steps: number, setSteps: React.Dispatch<React.SetStateAction<number>>,
-  numImages: number, setNumImages: React.Dispatch<React.SetStateAction<number>>,
-  seed: number, setSeed: React.Dispatch<React.SetStateAction<number>>,
-  seedLocked: boolean, setSeedLocked: React.Dispatch<React.SetStateAction<boolean>>,
-}) {
-  return <>
-    <form className='mb-6'>
-      <RangeInput label='Width' min={minDim} value={width} setValue={setWidth} max={maxDim} step={32}>
-        The width of your image(s).
-      </RangeInput>
-
-      <RangeInput label='Height' min={minDim} value={height} setValue={setHeight} max={maxDim} step={32}>
-        The height of your image(s).
-      </RangeInput>
-
-      <RangeInput label='CfgScale' min={0} value={cfgScale} setValue={setCfgScale} max={maxCfg} step={0.5}>
-        Adjusts how closely should the AI adhere to your prompt; higher values are more precise.
-      </RangeInput>
-
-      <RangeInput label='Steps' min={1} value={steps} setValue={setSteps} max={maxSteps} step={1}>
-        The amount of steps by which the AI will detail your art.
-      </RangeInput>
-
-      <RangeInput label='Number of Images' min={1} value={numImages} setValue={setNumImages} max={maxImages} step={1}>
-        Adjusts how closely should the AI adhere to your prompt; higher values are more precise.
-      </RangeInput>
-
-      <FreezableSeedInput label='Seed' value={seed} setValue={setSeed} locked={seedLocked} setLocked={setSeedLocked}>
-        The identifier for a given random generation. Unlock this to set or copy your own.
-      </FreezableSeedInput>
-    </form>
-  </>
-}
-
-*/
 
 function App() {
   const minDim = 256;
@@ -99,9 +48,9 @@ function App() {
   const [seedLocked, setSeedLocked] = useState(false);
 
   const [prompt, setPrompt] = useState('');
-  const [image, setImage] = useState('/noimg.png');
+  const [images, setImages] = useState(['/noimg.png']);
 
-  const [ws, connected] = useSocket(`ws://${fetchHost()}/channel`, openConnection, (ws: WebSocket, event: MessageEvent) => receiveMessage(ws, event, setImage)) as [React.MutableRefObject<WebSocket | null>, boolean];
+  const [ws, connected] = useSocket(`ws://${fetchHost()}/channel`, openConnection, (ws: WebSocket, event: MessageEvent) => receiveMessage(ws, event, setImages)) as [React.MutableRefObject<WebSocket | null>, boolean];
 
   return (
     <>
@@ -174,12 +123,12 @@ function App() {
           />
         </div>
 
-        <div className='flex flex-col place-items-center place-self-center w-full mb-2 md:mb-0'>
-          <div className='bg-neutral-900 aspect-square w-1/2 w-1/2 mb-24'>
-            <img className='w-full h-full' src={image} alt='The placeholder for our generated art.'/>
+        <div className='flex flex-col place-items-center place-self-center w-full h-full mb-2 md:mb-0 p-4'>
+          <div className='aspect-square w-full mb-20'>
+            <ImageDisplay images={images} />
           </div>
 
-          <div className='flex flex-col md:flex-row items-center w-full gap-y-2 md:px-24'>
+          <div className='flex flex-col md:flex-row items-center w-full gap-y-2 py-4 md:px-24'>
             <Prompt value={prompt} setValue={setPrompt} />
 
             <Button
