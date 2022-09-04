@@ -3,6 +3,7 @@ import Button from './components/button';
 import FreezableSeedInput from './components/freezable-seed-input';
 import Prompt from './components/prompt';
 import RangeInput from './components/range-input';
+import PromptForm from './components/prompt-form';
 import useSocket from './hooks/use-socket';
 import { fetchHost, genRandomSeed } from './libs/utils';
 
@@ -29,6 +30,8 @@ function send(
 
   ws.send(JSON.stringify(imageRequest));
 }
+
+/*
 
 // Perhaps a use-case for contexts; however,
 // given how shallow this code-base is, such architecture
@@ -78,6 +81,8 @@ function PromptForm({
   </>
 }
 
+*/
+
 function App() {
   const minDim = 256;
   const maxDim = 512;
@@ -105,32 +110,67 @@ function App() {
           <h1 className='text-2xl text-violet-500 font-bold mb-4 text-center md:text-left'>txt2img</h1>
 
           <PromptForm
-            minDim={minDim}
-            maxDim={maxDim}
-            maxCfg={maxCfg}
-            maxSteps={maxSteps}
-            maxImages={maxImages}
-
-            width={width}
-            setWidth={setWidth}
-
-            height={height}
-            setHeight={setHeight}
-
-            cfgScale={cfgScale}
-            setCfgScale={setCfgScale}
-
-            steps={steps}
-            setSteps={setSteps}
-
-            numImages={numImages}
-            setNumImages={setNumImages}
-
-            seed={seed}
-            setSeed={setSeed}
-
-            seedLocked={seedLocked}
-            setSeedLocked={setSeedLocked}
+            fieldList={[
+              {
+                class: "RangeInput",
+                label: "Width",
+                description: "The width of your image(s).",
+                value: width,
+                setValue: setWidth,
+                min: minDim,
+                max: maxDim,
+                step: 32
+              },
+              {
+                class: "RangeInput",
+                label: "Height",
+                description: "The height of your image(s).",
+                value: height,
+                setValue: setHeight,
+                min: minDim,
+                max: maxDim,
+                step: 32
+              },
+              {
+                class: "RangeInput",
+                label: "CfgScale",
+                description: "Adjusts how closely should the AI adhere to your prompt; higher values are more precise.",
+                value: cfgScale,
+                setValue: setCfgScale,
+                min: 0,
+                max: maxCfg,
+                step: 0.5
+              },
+              {
+                class: "RangeInput",
+                label: "Steps",
+                description: "The amount of steps by which the AI will detail your art.",
+                value: steps,
+                setValue: setSteps,
+                min: 1,
+                max: maxSteps,
+                step: 1
+              },
+              {
+                class: "RangeInput",
+                label: "Number of Images",
+                description: "Adjusts how closely should the AI adhere to your prompt; higher values are more precise.",
+                value: numImages,
+                setValue: setNumImages,
+                min: 1,
+                max: maxImages,
+                step: 1
+              },
+              {
+                class: "FreezableSeedInput",
+                label: "Seed",
+                description: "The identifier for a given random generation. Unlock this to set or copy your own.",
+                value: seed,
+                setValue: setSeed,
+                lock: seedLocked,
+                setLock: setSeedLocked
+              }
+            ]}
           />
         </div>
 
